@@ -43,7 +43,7 @@ Finally it is necessary to specify a cost function that defines how each state c
 
 #### 3. Timestep Length and Elapsed Duration
 
-The optimization is performed along a prediction horizon modeled through the number of timesteps `N` and the elapsed duration `dt`. It has been found that an approximate horizon of `N * dt = 0.85s` works well for the prediction of the trajectory. It was also experienced that the higher the velocity, the fewer number of timesteps are needed for a good optimization. The following values were found to give a good performance:
+The optimization is performed along a prediction horizon modelled through the number of timesteps `N` and the elapsed duration `dt`. It has been found that an approximate horizon of `N * dt = 0.85s` works well for the prediction of the trajectory. It was also experienced that the higher the velocity, the fewer number of timesteps are needed for a good optimization. The following values were found to give a good performance:
 
 | Velocity (mph)  | N             | dt (s)  |
 | -------------   | ------------- | -----   |
