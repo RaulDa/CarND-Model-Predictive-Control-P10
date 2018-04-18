@@ -1,108 +1,63 @@
-# CarND-Controls-MPC
-Self-Driving Car Engineer Nanodegree Program
+**Model Predictive Control Project**
+
+The goals / steps of this project are the following:
+
+* Implementation of the Model Predictive Control in C++ to control the actuator inputs of a car.
+* Application of the method on the term-2 simulator -complete a whole lap successfully.
+
+[//]: # (Image References)
+
+[image1]: ./outputs/RMSE_Unscented.png "Undistorted"
+[image2]: ./outputs/YawAngle.png "Undistorted"
+[image3]: ./outputs/YawRate.png "Undistorted"
+[image4]: ./outputs/Lidar_NIS.png "Undistorted"
+[image5]: ./outputs/Radar_NIS.png "Undistorted"
+
+## Rubric Points
+
+Here I will consider the [rubric points](https://review.udacity.com/#!/rubrics/896/view) individually and describe how I addressed each point in my implementation.
 
 ---
 
-## Dependencies
 
-* cmake >= 3.5
- * All OSes: [click here for installation instructions](https://cmake.org/install/)
-* make >= 4.1(mac, linux), 3.81(Windows)
-  * Linux: make is installed by default on most Linux distros
-  * Mac: [install Xcode command line tools to get make](https://developer.apple.com/xcode/features/)
-  * Windows: [Click here for installation instructions](http://gnuwin32.sourceforge.net/packages/make.htm)
-* gcc/g++ >= 5.4
-  * Linux: gcc / g++ is installed by default on most Linux distros
-  * Mac: same deal as make - [install Xcode command line tools]((https://developer.apple.com/xcode/features/)
-  * Windows: recommend using [MinGW](http://www.mingw.org/)
-* [uWebSockets](https://github.com/uWebSockets/uWebSockets)
-  * Run either `install-mac.sh` or `install-ubuntu.sh`.
-  * If you install from source, checkout to commit `e94b6e1`, i.e.
-    ```
-    git clone https://github.com/uWebSockets/uWebSockets
-    cd uWebSockets
-    git checkout e94b6e1
-    ```
-    Some function signatures have changed in v0.14.x. See [this PR](https://github.com/udacity/CarND-MPC-Project/pull/3) for more details.
+#### 1. Algorithm structure and processing flow
 
-* **Ipopt and CppAD:** Please refer to [this document](https://github.com/udacity/CarND-MPC-Project/blob/master/install_Ipopt_CppAD.md) for installation instructions.
-* [Eigen](http://eigen.tuxfamily.org/index.php?title=Main_Page). This is already part of the repo so you shouldn't have to worry about it.
-* Simulator. You can download these from the [releases tab](https://github.com/udacity/self-driving-car-sim/releases).
-* Not a dependency but read the [DATA.md](./DATA.md) for a description of the data sent back from the simulator.
+The algorithm is divided in the following source code files located in `/src`:
 
+`main.cpp` -> Main routine to read the simulator data and call the MPC `Solve` function, which represents the routine where the best trajectory is calculated.
 
-## Basic Build Instructions
+`MPC.cpp` -> Contains the class MPC. It defines the routine `Solve`, from where ipopt runs to find locally optimal values. Additionally, the `FG_eval` function is defined. It includes the `operator` routine, which implements the cost function and sets the model constraints.
 
-1. Clone this repo.
-2. Make a build directory: `mkdir build && cd build`
-3. Compile: `cmake .. && make`
-4. Run it: `./mpc`.
+#### 2. Model
 
-## Tips
+The model consists of an optimizer with a set of six equations to update the vehicle state as well as the Cross Track and orientation errors. Four equations correspond to the state (`x` and `y` positions, velocity and orientation) and the other two to both errors. The equations use as inputs the current state, the current actuator inputs and the polynomial that represents the reference trajectory.
 
-1. It's recommended to test the MPC on basic examples to see if your implementation behaves as desired. One possible example
-is the vehicle starting offset of a straight line (reference). If the MPC implementation is correct, after some number of timesteps
-(not too many) it should find and track the reference line.
-2. The `lake_track_waypoints.csv` file has the waypoints of the lake track. You could use this to fit polynomials and points and see of how well your model tracks curve. NOTE: This file might be not completely in sync with the simulator so your solution should NOT depend on it.
-3. For visualization this C++ [matplotlib wrapper](https://github.com/lava/matplotlib-cpp) could be helpful.)
-4.  Tips for setting up your environment are available [here](https://classroom.udacity.com/nanodegrees/nd013/parts/40f38239-66b6-46ec-ae68-03afd8a601c8/modules/0949fca6-b379-42af-a919-ee50aa304e6a/lessons/f758c44c-5e40-4e01-93b5-1a82aa4e044f/concepts/23d376c7-0195-4276-bdf0-e02f1f3c665d)
-5. **VM Latency:** Some students have reported differences in behavior using VM's ostensibly a result of latency.  Please let us know if issues arise as a result of a VM environment.
+The model sets actuator input constraints. In this case, the default constraints have been selected. This means that the steering angle is within a range of `[-25, 25]°` and the acceleration within `[-1, 1] m/s2`.
 
-## Editor Settings
+Finally it is necessary to specify a cost function that defines how each state component affects the optimization calculation. The magnitude of CTE, orientation, velocity and actuator inputs penalize the calculation. Additionally, the difference between consecutive cycles regarding steering angle and acceleration has been also considered. In order to avoid significant turns, it has been decided that the steering angle difference between cycles is the component that penalizes most the cost function (factor `50000000` applied).
 
-We've purposefully kept editor configuration files out of this repo in order to
-keep it as simple and environment agnostic as possible. However, we recommend
-using the following settings:
+#### 3. Timestep Length and Elapsed Duration
 
-* indent using spaces
-* set tab width to 2 spaces (keeps the matrices in source code aligned)
+The optimization is performed along a prediction horizon modeled through the number of timesteps `N` and the elapsed duration `dt`. It has been found that an approximate horizon of `N * dt = 0.85s` works well for the prediction of the trajectory. It was also experienced that the higher the velocity, the fewer number of timesteps are needed for a good optimization. The following values were found to give a good performance:
 
-## Code Style
+| Velocity(mph)         		|     N	        					|   dt(s)
+|:---------------------:|:---------------------------------------------:|
+| 40         		| 25   							| 0.0340
+|	50					|	25											| 0.0340
+| 60 	| 15 	| 0.0583
+| 70 	| 14 	| 0.0602
+| 80 	| 14 	| 0.0602
 
-Please (do your best to) stick to [Google's C++ style guide](https://google.github.io/styleguide/cppguide.html).
+#### 4. Polynomial fitting and MPC preprocessing
 
-## Project Instructions and Rubric
+As previously mentioned, a polynomial modeling the reference trajectory acts as input of the model. In order to calculate it, the simulator provides six points of the trajectory. These are introduced to `polyfit`, that calculates the coefficients. In this case it is possible to tune the polynomial degree, so a third-degree polynomial has been finally chosen, since it offered the best results.
 
-Note: regardless of the changes you make, your project must be buildable using
-cmake and make!
+It is important to mention that, as specified in the project Q&A, in order to get the method working with the simulator, it is necessary to convert these points to the vehicle coordinate system. The conversion is done through the equations implemented in the `for` loop of the line `96` of `main.cpp`. After the conversion, the `x` and `y` coordinates as well as the orientation should be considered as `0` for the calculation of `epsi`, and also the vehicle coordinate system values are introduced as state components to the MPC.
 
-More information is only accessible by people who are already enrolled in Term 2
-of CarND. If you are enrolled, see [the project page](https://classroom.udacity.com/nanodegrees/nd013/parts/40f38239-66b6-46ec-ae68-03afd8a601c8/modules/f1820894-8322-4bb3-81aa-b26b3c6dcbaf/lessons/b1ff3be0-c904-438e-aad3-2b5379f0e0c3/concepts/1a2255a0-e23c-44cf-8d41-39b8a3c8264a)
-for instructions and the project rubric.
+#### 5. MPC with latency
 
-## Hints!
+The model should handle a latency of 100ms. In this case, this is achieved with the `sleep_for` method used in the initial code version. This instruction is located in the line `167` of the final version of `main.cpp`.
 
-* You don't have to follow this directory structure, but if you do, your work
-  will span all of the .cpp files here. Keep an eye out for TODOs.
+#### 6. Results
 
-## Call for IDE Profiles Pull Requests
-
-Help your fellow students!
-
-We decided to create Makefiles with cmake to keep this project as platform
-agnostic as possible. Similarly, we omitted IDE profiles in order to we ensure
-that students don't feel pressured to use one IDE or another.
-
-However! I'd love to help people get up and running with their IDEs of choice.
-If you've created a profile for an IDE that you think other students would
-appreciate, we'd love to have you add the requisite profile files and
-instructions to ide_profiles/. For example if you wanted to add a VS Code
-profile, you'd add:
-
-* /ide_profiles/vscode/.vscode
-* /ide_profiles/vscode/README.md
-
-The README should explain what the profile does, how to take advantage of it,
-and how to install it.
-
-Frankly, I've never been involved in a project with multiple IDE profiles
-before. I believe the best way to handle this would be to keep them out of the
-repo root to avoid clutter. My expectation is that most profiles will include
-instructions to copy files to a new location to get picked up by the IDE, but
-that's just a guess.
-
-One last note here: regardless of the IDE used, every submitted project must
-still be compilable with cmake and make./
-
-## How to write a README
-A well written README file can enhance your project and portfolio.  Develop your abilities to create professional README files by completing [this free course](https://www.udacity.com/course/writing-readmes--ud777).
+The car drives successfully and safely during a whole lap with a velocity of `60mph`, with `N` equal to `15` and `dt` to `0.0583s`. Higher speeds (`70mph`, and eventually `80mph` when the acceleration magnitude is not included in the cost function and the penalization of steering angle difference between cycles is reduced) have also been achieved, but with a more abrupt driving and popping up onto ledges.
