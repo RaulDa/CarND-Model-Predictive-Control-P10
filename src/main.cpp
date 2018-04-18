@@ -12,13 +12,13 @@
 // for convenience
 using json = nlohmann::json;
 
-// For converting back and forth between radians and degrees.
+// for converting back and forth between radians and degrees.
 constexpr double pi() { return M_PI; }
 double deg2rad(double x) { return x * pi() / 180; }
 double rad2deg(double x) { return x * 180 / pi(); }
 
-// Checks if the SocketIO event has JSON data.
-// If there is data the JSON object in string format will be returned,
+// checks if the SocketIO event has JSON data.
+// if there is data the JSON object in string format will be returned,
 // else the empty string "" will be returned.
 string hasData(string s) {
   auto found_null = s.find("null");
@@ -32,7 +32,7 @@ string hasData(string s) {
   return "";
 }
 
-// Evaluate a polynomial.
+// evaluate a polynomial.
 double polyeval(Eigen::VectorXd coeffs, double x) {
   double result = 0.0;
   for (int i = 0; i < coeffs.size(); i++) {
@@ -41,8 +41,8 @@ double polyeval(Eigen::VectorXd coeffs, double x) {
   return result;
 }
 
-// Fit a polynomial.
-// Adapted from
+// fit a polynomial.
+// adapted from
 // https://github.com/JuliaMath/Polynomials.jl/blob/master/src/Polynomials.jl#L676-L716
 Eigen::VectorXd polyfit(Eigen::VectorXd xvals, Eigen::VectorXd yvals,
                         int order) {
@@ -74,8 +74,8 @@ int main() {
   h.onMessage([&mpc](uWS::WebSocket<uWS::SERVER> ws, char *data, size_t length,
                      uWS::OpCode opCode) {
     // "42" at the start of the message means there's a websocket message event.
-    // The 4 signifies a websocket message
-    // The 2 signifies a websocket event
+    // the 4 signifies a websocket message
+    // the 2 signifies a websocket event
     string sdata = string(data).substr(0, length);
     cout << sdata << endl;
     if (sdata.size() > 2 && sdata[0] == '4' && sdata[1] == '2') {
@@ -92,24 +92,51 @@ int main() {
           double psi = j[1]["psi"];
           double v = j[1]["speed"];
 
-          /*
-          * TODO: Calculate steering angle and throttle using MPC.
-          *
-          * Both are in between [-1, 1].
-          *
-          */
-          double steer_value;
-          double throttle_value;
+          // transform reference trajectory points to vehicle coordinate system
+          for(int i=0;i<ptsx.size();i++){
+        	  double shift_x = ptsx[i]-px;
+        	  double shift_y = ptsy[i]-py;
+
+        	  ptsx[i] = shift_x*cos(psi)+shift_y*sin(psi);
+        	  ptsy[i] = -shift_x*sin(psi)+shift_y*cos(psi);
+          }
+
+          Eigen::VectorXd ptsx_(6);
+          Eigen::VectorXd ptsy_(6);
+          ptsx_ << ptsx[0], ptsx[1], ptsx[2], ptsx[3], ptsx[4], ptsx[5];
+          ptsy_ << ptsy[0], ptsy[1], ptsy[2], ptsy[3], ptsy[4], ptsy[5];
+
+          // calculate polynomial
+          auto coeffs = polyfit(ptsx_, ptsy_, 3);
+          // calculate the cross track error (y=0 because of transformation to vehicle coordinates)
+          double cte = polyeval(coeffs, 0);
+          // calculate the orientation error (x=0 because of transformation to vehicle coordinates)
+          double epsi = psi - atan(coeffs[1]);
+
+          // define state vector to be sent to MPC
+          Eigen::VectorXd state(6);
+          state << 0, 0, 0, v, cte, epsi;
+
+          // predict trajectory and calculate actuator inputs
+          auto vars = mpc.Solve(state, coeffs);
+
+          // obtained actuator inputs
+          double steer_value = vars[4];
+          double throttle_value = vars[5];
 
           json msgJson;
-          // NOTE: Remember to divide by deg2rad(25) before you send the steering value back.
-          // Otherwise the values will be in between [-deg2rad(25), deg2rad(25] instead of [-1, 1].
-          msgJson["steering_angle"] = steer_value;
+          // actuator inputs sent to simulator (conversion to rad)
+          msgJson["steering_angle"] = steer_value/deg2rad(25);
           msgJson["throttle"] = throttle_value;
 
-          //Display the MPC predicted trajectory 
+          // display the MPC predicted trajectory
           vector<double> mpc_x_vals;
           vector<double> mpc_y_vals;
+
+          for(int i=0;i<vars[6];i++){
+             mpc_x_vals.push_back(vars[7 + i]);
+             mpc_y_vals.push_back(vars[7 + vars[6] + i]);
+          }
 
           //.. add (x,y) points to list here, points are in reference to the vehicle's coordinate system
           // the points in the simulator are connected by a Green line
@@ -117,9 +144,14 @@ int main() {
           msgJson["mpc_x"] = mpc_x_vals;
           msgJson["mpc_y"] = mpc_y_vals;
 
-          //Display the waypoints/reference line
+          // display the waypoints/reference line
           vector<double> next_x_vals;
           vector<double> next_y_vals;
+
+          for (int i=0;i<vars[6];i++){
+             next_x_vals.push_back(i*2);
+             next_y_vals.push_back(coeffs[0] + coeffs[1] * i*2 + coeffs[2] * i*2 * i*2 + coeffs[3] * i*2 * i*2 * i*2);
+          }
 
           //.. add (x,y) points to list here, points are in reference to the vehicle's coordinate system
           // the points in the simulator are connected by a Yellow line
@@ -130,20 +162,14 @@ int main() {
 
           auto msg = "42[\"steer\"," + msgJson.dump() + "]";
           std::cout << msg << std::endl;
-          // Latency
-          // The purpose is to mimic real driving conditions where
-          // the car does actuate the commands instantly.
-          //
-          // Feel free to play around with this value but should be to drive
-          // around the track with 100ms latency.
-          //
-          // NOTE: REMEMBER TO SET THIS TO 100 MILLISECONDS BEFORE
-          // SUBMITTING.
+
+          // latency of 100ms
           this_thread::sleep_for(chrono::milliseconds(100));
           ws.send(msg.data(), msg.length(), uWS::OpCode::TEXT);
         }
       } else {
-        // Manual driving
+
+        // manual driving
         std::string msg = "42[\"manual\",{}]";
         ws.send(msg.data(), msg.length(), uWS::OpCode::TEXT);
       }
