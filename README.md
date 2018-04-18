@@ -7,7 +7,7 @@
 
 The goals / steps of this project are the following:
 
-* Implementation of the Model Predictive Control in C++ to control the actuator inputs of a car.
+* Implementation of the Model Predictive Control method in C++ to control the actuator inputs of a car.
 * Application of the method on the term-2 simulator -complete a whole lap successfully.
 
 [//]: # (Image References)
