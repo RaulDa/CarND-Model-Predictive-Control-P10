@@ -12,6 +12,10 @@
 // for convenience
 using json = nlohmann::json;
 
+// latency and Lf
+double latency_dt = 0.1;
+const double Lf = 2.67;
+
 // for converting back and forth between radians and degrees.
 constexpr double pi() { return M_PI; }
 double deg2rad(double x) { return x * pi() / 180; }
@@ -91,6 +95,8 @@ int main() {
           double py = j[1]["y"];
           double psi = j[1]["psi"];
           double v = j[1]["speed"];
+          double steer_value = j[1]["steering_angle"];
+          double throttle_value = j[1]["throttle"];
 
           // transform reference trajectory points to vehicle coordinate system
           for(int i=0;i<ptsx.size();i++){
@@ -113,6 +119,14 @@ int main() {
           // calculate the orientation error (x=0 because of transformation to vehicle coordinates)
           double epsi = psi - atan(coeffs[1]);
 
+          // predict state 100ms later
+          px = v * cos(psi) * latency_dt;
+          py = v * sin(psi) * latency_dt;
+          psi = v * steer_value / Lf * latency_dt;
+          v = v + throttle_value * latency_dt;
+          cte = cte + v * sin(epsi) * latency_dt;
+          epsi = epsi + v * steer_value / Lf * latency_dt;
+
           // define state vector to be sent to MPC
           Eigen::VectorXd state(6);
           state << 0, 0, 0, v, cte, epsi;
@@ -121,8 +135,8 @@ int main() {
           auto vars = mpc.Solve(state, coeffs);
 
           // obtained actuator inputs
-          double steer_value = vars[4];
-          double throttle_value = vars[5];
+          steer_value = vars[4];
+          throttle_value = vars[5];
 
           json msgJson;
           // actuator inputs sent to simulator (conversion to rad)
@@ -208,4 +222,4 @@ int main() {
     return -1;
   }
   h.run();
-}
+} 
