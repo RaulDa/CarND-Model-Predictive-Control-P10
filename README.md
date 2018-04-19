@@ -61,7 +61,7 @@ It is important to mention that, as specified in the project Q&A, in order to ge
 
 #### 5. MPC with latency
 
-The model should handle a latency of 100ms. In this case, this is achieved with the `sleep_for` method used in the initial code version. This instruction is located in the line `167` of the final version of `main.cpp`.
+The model should handle a latency of 100ms. In this case, its application is achieved with the `sleep_for` method used in the initial code version. This instruction is located in the line `167` of the final version of `main.cpp`. It is also necessary to make predictions of the state 100ms in the future and pass it to solver. For the prediction the kinematic equations are used in the line `122` of `main.cpp`
 
 #### 6. Results
 
