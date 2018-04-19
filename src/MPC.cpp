@@ -6,8 +6,8 @@
 using CppAD::AD;
 
 // set length and duration
-size_t N = 14;
-double dt = 0.0602;
+size_t N = 15;
+double dt = 0.0583;
 
 // obtained by measuring the radius formed by running the vehicle in the
 // simulator around in a circle with a constant steering angle and velocity on a
@@ -248,4 +248,4 @@ vector<double> MPC::Solve(Eigen::VectorXd state, Eigen::VectorXd coeffs) {
   }
 
   return output;
-}
+} 
